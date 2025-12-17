@@ -16,7 +16,7 @@ fn count_digits(number: u64) -> usize {
 }
 
 /// Returns true if `number` has a sequence of digits that is repeacted exactly twice.
-fn is_invalid_id(number: u64) -> bool {
+fn is_invalid_id_v1(number: u64) -> bool {
     let digit_count = count_digits(number);
     if !digit_count.is_multiple_of(2) {
         // We neeed to equally-sized sequences of digits.
@@ -28,6 +28,39 @@ fn is_invalid_id(number: u64) -> bool {
     let quotient = number / divider;
     let remainder = number % divider;
     quotient == remainder
+}
+
+/// Returns true if `number` has a sequence of digits that is repeated at least twice.
+fn is_invalid_id_v2(number: u64) -> bool {
+    let digit_count = count_digits(number);
+
+    // Not all sequence lengths are to be evaluated, only those that are a multiple of digit_count.
+    let possible_seq_lengths = (1..=(digit_count / 2)).filter(|l| digit_count.is_multiple_of(*l));
+
+    for seq_len in possible_seq_lengths {
+        let divider = 10_u64.pow(seq_len as u32);
+        let mut number = number;
+        let mut previous_remainder: Option<u64> = None;
+        let mut all_remainders_are_equal = true;
+        // We loop hoping to get the same remainder for all subsequent divisions by the same
+        // divider.
+        for _ in 0..(digit_count / seq_len) {
+            let quotient = number / divider;
+            let remainder = number % divider;
+            if let Some(prev_remainder) = previous_remainder
+                && prev_remainder != remainder
+            {
+                all_remainders_are_equal = false;
+                break;
+            }
+            number = quotient;
+            previous_remainder = Some(remainder);
+        }
+        if all_remainders_are_equal {
+            return true;
+        }
+    }
+    false
 }
 
 struct Ranges<R: BufRead> {
@@ -70,13 +103,18 @@ impl<R: BufRead> Iterator for Ranges<R> {
     }
 }
 
-fn solve<R: BufRead>(reader: R) -> Result<u64> {
+fn solve<R: BufRead>(reader: R) -> Result<(u64, u64)> {
     let ranges = Ranges::new(reader);
-    let sum_of_invalid_ids: u64 = ranges
-        .flatten()
-        .filter(|number| is_invalid_id(*number))
+    let all_ids: Vec<u64> = ranges.flatten().collect();
+    let sum_of_invalid_ids_v1: u64 = all_ids
+        .iter()
+        .filter(|number| is_invalid_id_v1(**number))
         .sum();
-    Ok(sum_of_invalid_ids)
+    let sum_of_invalid_ids_v2: u64 = all_ids
+        .iter()
+        .filter(|number| is_invalid_id_v2(**number))
+        .sum();
+    Ok((sum_of_invalid_ids_v1, sum_of_invalid_ids_v2))
 }
 
 fn main() -> Result<()> {
@@ -84,8 +122,9 @@ fn main() -> Result<()> {
     let input_file = File::open(input_path).context("Couldn't open input path")?;
     let reader = BufReader::new(input_file);
 
-    let part1 = solve(reader).context("Couldn't solve input")?;
+    let (part1, part2) = solve(reader).context("Couldn't solve input")?;
     println!("Solution (part#1): {part1}");
+    println!("Solution (part#2): {part2}");
     Ok(())
 }
 
@@ -96,8 +135,6 @@ mod test {
 
     use rstest::rstest;
 
-    use crate::is_invalid_id;
-
     #[rstest]
     #[case(11, true)]
     #[case(99, true)]
@@ -107,8 +144,24 @@ mod test {
     #[case(10, false)]
     #[case(101, false)]
     #[case(1001, false)]
-    fn test_is_invalid_id(#[case] input: u64, #[case] expected: bool) {
-        assert_eq!(is_invalid_id(input), expected)
+    fn test_is_invalid_id_v1(#[case] input: u64, #[case] expected: bool) {
+        assert_eq!(is_invalid_id_v1(input), expected)
+    }
+
+    #[rstest]
+    #[case(11, true)]
+    #[case(99, true)]
+    #[case(1010, true)]
+    #[case(8888, true)]
+    #[case(123123123, true)]
+    #[case(1212121212, true)]
+    #[case(1111111, true)]
+    #[case(3, false)]
+    #[case(10, false)]
+    #[case(101, false)]
+    #[case(1001, false)]
+    fn test_is_invalid_id_v2(#[case] input: u64, #[case] expected: bool) {
+        assert_eq!(is_invalid_id_v2(input), expected)
     }
 
     #[rstest]
@@ -118,6 +171,6 @@ mod test {
 
         let result = solve(reader);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 1227775554);
+        assert_eq!(result.unwrap(), (1227775554, 4174379265));
     }
 }
