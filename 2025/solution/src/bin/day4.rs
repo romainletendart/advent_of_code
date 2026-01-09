@@ -17,8 +17,16 @@ impl Grid {
         self.data[y * self.height + x]
     }
 
+    fn set(&mut self, x: usize, y: usize, value: u8) {
+        self.data[y * self.height + x] = value
+    }
+
     fn is_paper_roll(&self, x: usize, y: usize) -> bool {
         self.get(x, y) == b'@'
+    }
+
+    fn remove_paper_roll(&mut self, x: usize, y: usize) {
+        self.set(x, y, b'.')
     }
 
     fn is_accessible(&self, x: usize, y: usize) -> bool {
@@ -107,6 +115,28 @@ fn solve_part_1<R: BufRead>(reader: R) -> Result<u64> {
     Ok(accessible_position_count as u64)
 }
 
+fn solve_part_2<R: BufRead>(reader: R) -> Result<u64> {
+    let mut grid = Grid::from_reader(reader)?;
+    let mut removed_paper_roll_count = 0;
+
+    loop {
+        let candidate_positions =
+            (0..grid.width).flat_map(|x| (0..grid.height).map(move |y| (x, y)));
+        let accessible_positions: Vec<(usize, usize)> = candidate_positions
+            .filter(|pos| grid.is_paper_roll(pos.0, pos.1))
+            .filter(|pos| grid.is_accessible(pos.0, pos.1))
+            .collect();
+        if accessible_positions.is_empty() {
+            break;
+        }
+        for pos in &accessible_positions {
+            grid.remove_paper_roll(pos.0, pos.1);
+        }
+        removed_paper_roll_count += accessible_positions.len();
+    }
+    Ok(removed_paper_roll_count as u64)
+}
+
 fn main() -> Result<()> {
     let input_path = args().nth(1).context("Missing input path")?;
     let input_file = File::open(&input_path).context("Couldn't open input path")?;
@@ -114,6 +144,12 @@ fn main() -> Result<()> {
 
     let part1 = solve_part_1(reader).context("Couldn't solve input")?;
     println!("Solution (part#1): {part1}");
+
+    let input_file = File::open(&input_path).context("Couldn't open input path")?;
+    let reader = BufReader::new(input_file);
+
+    let part2 = solve_part_2(reader).context("Couldn't solve input")?;
+    println!("Solution (part#2): {part2}");
 
     Ok(())
 }
@@ -160,5 +196,14 @@ mod test {
         let result = solve_part_1(reader);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 13);
+    }
+
+    #[rstest]
+    fn test_solve_part_2() {
+        let reader = Cursor::new(EXAMPLE_INPUT);
+
+        let result = solve_part_2(reader);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 43);
     }
 }
